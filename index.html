@@ -2,20 +2,72 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GPS Map Camera Web</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: sans-serif; }
+        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: sans-serif; touch-action: manipulation; }
         #camera-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.5); padding: 15px; box-sizing: border-box; display: flex; gap: 15px; color: white; text-shadow: 1px 1px 2px black; }
-        #map-thumb { width: 80px; height: 80px; background-color: #ddd; border: 2px solid white; border-radius: 5px; margin-top: -30px; background-image: url('https://tile.openstreetmap.org/1/0/0.png'); background-size: cover; position: relative; }
-        #map-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-size: 24px; }
-        #info-text { flex: 1; font-size: 12px; line-height: 1.4; }
-        .title { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
-        #controls { position: absolute; bottom: 120px; width: 100%; text-align: center; }
-        button { padding: 15px 30px; font-size: 16px; background-color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        #status { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.8); color: black; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+        
+        /* Overlay responsif */
+        #overlay { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            background: rgba(0, 0, 0, 0.5); 
+            padding: 4vw; /* padding menyesuaikan lebar layar */
+            box-sizing: border-box; 
+            display: flex; 
+            gap: 3vw; 
+            color: white; 
+            text-shadow: 1px 1px 2px black; 
+            z-index: 5;
+        }
+        
+        #map-thumb { 
+            width: 20vw; max-width: 80px; 
+            height: 20vw; max-height: 80px; 
+            background-color: #ddd; 
+            border: 2px solid white; 
+            border-radius: 5px; 
+            margin-top: -6vw; 
+            background-image: url('https://tile.openstreetmap.org/1/0/0.png'); 
+            background-size: cover; 
+            position: relative; 
+            flex-shrink: 0;
+        }
+        
+        #map-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-size: clamp(16px, 6vw, 24px); }
+        
+        /* Teks responsif dengan batas minimum dan maksimum */
+        #info-text { flex: 1; font-size: clamp(10px, 3vw, 13px); line-height: 1.4; word-wrap: break-word; }
+        .title { font-size: clamp(14px, 4vw, 17px); font-weight: bold; margin-bottom: 5px; }
+        
+        /* Tombol diposisikan 32% dari bawah layar, pasti selalu di atas watermark */
+        #controls { 
+            position: absolute; 
+            bottom: 32vh; 
+            width: 100%; 
+            text-align: center; 
+            z-index: 10; /* Lapisan paling atas */
+        }
+        
+        button { 
+            padding: 15px 35px; 
+            font-size: 16px; 
+            background-color: white; 
+            color: #333;
+            border: none; 
+            border-radius: 30px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); 
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        
+        #status { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.9); color: black; padding: 8px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; z-index: 10; white-space: nowrap; }
         canvas { display: none; }
     </style>
 </head>
@@ -52,7 +104,7 @@
 
     let currentData = { lat: 0, lon: 0, title: "", address: "", time: "" };
 
-    // 1. Mulai Kamera
+    // 1. Mulai Kamera (Kamera Belakang)
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => {
             video.srcObject = stream;
@@ -86,7 +138,7 @@
         );
     }
 
-    // 3. Ubah Koordinat jadi Alamat (Nominatim API)
+    // 3. Ubah Koordinat jadi Alamat
     function fetchAddress(lat, lon) {
         fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
             .then(res => res.json())
@@ -103,7 +155,7 @@
             });
     }
 
-    // 4. Update Teks di Layar
+    // 4. Update Teks
     function updateOverlay() {
         const now = new Date();
         const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -117,8 +169,6 @@
         document.getElementById('coords-text').innerText = `Lat ${currentData.latStr}° Long ${currentData.lonStr}°`;
         document.getElementById('time-text').innerText = currentData.time;
     }
-
-    // Update waktu setiap detik
     setInterval(updateOverlay, 1000);
 
     // 5. Proses Jepret & Download
@@ -126,26 +176,21 @@
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
-        // Gambar video ke kanvas
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Styling Watermark Box
         const boxHeight = canvas.height * 0.25;
         const startY = canvas.height - boxHeight;
         ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
         ctx.fillRect(0, startY, canvas.width, boxHeight);
 
-        // Styling Teks
         ctx.fillStyle = "white";
         ctx.shadowColor = "black";
         ctx.shadowBlur = 4;
         const paddingLeft = canvas.width * 0.25; 
         
-        // Judul Lokasi
         ctx.font = `bold ${canvas.height * 0.035}px sans-serif`;
         ctx.fillText(currentData.title, paddingLeft, startY + (boxHeight * 0.25));
 
-        // Info Alamat, Koordinat, Waktu
         ctx.font = `${canvas.height * 0.02}px sans-serif`;
         let textY = startY + (boxHeight * 0.45);
         const lineHeight = canvas.height * 0.03;
@@ -155,7 +200,6 @@
         ctx.fillText(currentData.time, paddingLeft, textY + (lineHeight * 2));
         ctx.fillText("Note : Captured by GPS Map Camera", paddingLeft, textY + (lineHeight * 3));
 
-        // Gambar Fake Map Thumb
         ctx.fillStyle = "#ddd";
         ctx.fillRect(canvas.width * 0.05, startY - (boxHeight * 0.1), canvas.width * 0.15, canvas.width * 0.15);
         ctx.strokeStyle = "white";
@@ -165,7 +209,6 @@
         ctx.font = `bold ${canvas.height * 0.05}px sans-serif`;
         ctx.fillText("📍", canvas.width * 0.1, startY + (boxHeight * 0.15));
 
-        // Download Hasil
         const dataURL = canvas.toDataURL('image/jpeg', 0.9);
         const link = document.createElement('a');
         link.download = `Geotag_${Date.now()}.jpg`;
