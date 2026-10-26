@@ -33,9 +33,9 @@
         #info-text { flex: 1; font-size: clamp(10px, 3vw, 13px); line-height: 1.4; word-wrap: break-word; }
         .title { font-size: clamp(14px, 4vw, 17px); font-weight: bold; margin-bottom: 5px; }
         
-        #bottom-bar { background: #000; padding: 20px 0 40px 0; display: flex; justify-content: center; gap: 20px; z-index: 10; }
+        #bottom-bar { background: #000; padding: 20px 5px 40px 5px; display: flex; justify-content: center; gap: 10px; z-index: 10; }
         .action-btn { 
-            padding: 15px 30px; font-size: 16px; background-color: white; color: #333;
+            padding: 12px 15px; font-size: 14px; background-color: white; color: #333;
             border: none; border-radius: 30px; cursor: pointer; font-weight: bold; 
             box-shadow: 0 4px 10px rgba(255,255,255,0.2); transition: transform 0.1s;
         }
@@ -74,6 +74,7 @@
 
 <div id="bottom-bar">
     <button class="action-btn" id="switch-btn">🔄 Balik</button>
+    <button class="action-btn" id="tag-btn">🏷️ Tag: Bawah</button>
     <button class="action-btn" id="capture-btn">📸 Foto</button>
 </div>
 
@@ -86,7 +87,9 @@
     const statusEl = document.getElementById('status');
     const captureBtn = document.getElementById('capture-btn');
     const switchBtn = document.getElementById('switch-btn');
+    const tagBtn = document.getElementById('tag-btn');
     const videoWrapper = document.getElementById('video-wrapper');
+    const overlay = document.getElementById('overlay');
     const ratioBtns = document.querySelectorAll('.ratio-btn');
 
     const btnStandard = document.getElementById('btn-standard');
@@ -96,29 +99,69 @@
     let useFrontCamera = false;
     let currentStream = null;
     let targetRatio = 0.75; 
+    let tagMode = 'bottom'; // 'bottom', 'right', 'left'
+
+    // Logika Pemindahan Tag Manual
+    tagBtn.addEventListener('click', () => {
+        if (tagMode === 'bottom') {
+            tagMode = 'right';
+            tagBtn.innerText = "🏷️ Tag: Kanan";
+        } else if (tagMode === 'right') {
+            tagMode = 'left';
+            tagBtn.innerText = "🏷️ Tag: Kiri";
+        } else {
+            tagMode = 'bottom';
+            tagBtn.innerText = "🏷️ Tag: Bawah";
+        }
+        updateTagLayout();
+    });
+
+    function updateTagLayout() {
+        const vw = videoWrapper.clientWidth;
+        const vh = videoWrapper.clientHeight;
+        
+        if (tagMode === 'bottom') {
+            overlay.style.width = '100%';
+            overlay.style.bottom = '0';
+            overlay.style.left = '0';
+            overlay.style.top = 'auto';
+            overlay.style.transform = 'none';
+        } else if (tagMode === 'right') {
+            overlay.style.width = vh + 'px';
+            overlay.style.bottom = 'auto';
+            overlay.style.left = vw + 'px';
+            overlay.style.top = '0';
+            overlay.style.transformOrigin = 'top left';
+            overlay.style.transform = 'rotate(90deg)';
+        } else if (tagMode === 'left') {
+            overlay.style.width = vh + 'px';
+            overlay.style.bottom = vh + 'px';
+            overlay.style.left = '0';
+            overlay.style.top = 'auto';
+            overlay.style.transformOrigin = 'bottom left';
+            overlay.style.transform = 'rotate(-90deg)';
+        }
+    }
+
+    // Pantau perubahan ukuran layar agar tag tetap proporsional saat dimiringkan
+    const resizeObserver = new ResizeObserver(() => updateTagLayout());
+    resizeObserver.observe(videoWrapper);
 
     function updateOrientation() {
         const isLandscape = window.innerWidth > window.innerHeight;
-        
         if (isLandscape) {
-            btnStandard.innerText = "4:3";
-            btnStandard.setAttribute('data-ratio', "1.333333");
-            btnWide.innerText = "16:9";
-            btnWide.setAttribute('data-ratio', "1.777778");
+            btnStandard.innerText = "4:3"; btnStandard.setAttribute('data-ratio', "1.333333");
+            btnWide.innerText = "16:9"; btnWide.setAttribute('data-ratio', "1.777778");
         } else {
-            btnStandard.innerText = "3:4";
-            btnStandard.setAttribute('data-ratio', "0.75");
-            btnWide.innerText = "9:16";
-            btnWide.setAttribute('data-ratio', "0.5625");
+            btnStandard.innerText = "3:4"; btnStandard.setAttribute('data-ratio', "0.75");
+            btnWide.innerText = "9:16"; btnWide.setAttribute('data-ratio', "0.5625");
         }
-
         const activeBtn = document.querySelector('.ratio-btn.active');
         if (activeBtn) {
             targetRatio = parseFloat(activeBtn.getAttribute('data-ratio'));
             videoWrapper.style.aspectRatio = targetRatio;
         }
     }
-
     window.addEventListener('resize', updateOrientation);
     window.addEventListener('orientationchange', updateOrientation);
     updateOrientation();
@@ -134,10 +177,7 @@
 
     function startCamera() {
         if (currentStream) currentStream.getTracks().forEach(track => track.stop());
-        
-        // Menerapkan efek cermin pada pratinjau video jika kamera depan aktif
         video.style.transform = useFrontCamera ? "scaleX(-1)" : "scaleX(1)";
-
         const constraints = { video: { facingMode: useFrontCamera ? "user" : "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } };
         navigator.mediaDevices.getUserMedia(constraints)
             .then(stream => {
@@ -186,6 +226,35 @@
     }
     setInterval(updateOverlay, 1000);
 
+    // Fungsi Render Teks Geotag di atas Kanvas
+    function drawWatermark(ctx, cw, ch, scaleRef) {
+        const boxHeight = scaleRef * 0.22;
+        const uiStartY = ch - boxHeight;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(0, uiStartY, cw, boxHeight);
+
+        ctx.fillStyle = "white"; ctx.shadowColor = "black"; ctx.shadowBlur = 4;
+        const paddingLeft = cw * 0.25; 
+        
+        ctx.font = `bold ${scaleRef * 0.030}px sans-serif`;
+        ctx.fillText(currentData.title, paddingLeft, uiStartY + (boxHeight * 0.25));
+
+        ctx.font = `${scaleRef * 0.018}px sans-serif`;
+        let textY = uiStartY + (boxHeight * 0.45);
+        const lineHeight = scaleRef * 0.025;
+        
+        ctx.fillText(currentData.address.substring(0, 80) + '...', paddingLeft, textY);
+        ctx.fillText(`Lat ${currentData.latStr}° Long ${currentData.lonStr}°`, paddingLeft, textY + lineHeight);
+        ctx.fillText(currentData.time, paddingLeft, textY + (lineHeight * 2));
+        ctx.fillText("Note : Captured by GPS Map Camera", paddingLeft, textY + (lineHeight * 3));
+
+        const mapSize = Math.min(cw, ch) * 0.15;
+        const mapY = uiStartY - (mapSize * 0.3);
+        ctx.fillStyle = "#ddd"; ctx.fillRect(cw * 0.05, mapY, mapSize, mapSize);
+        ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.strokeRect(cw * 0.05, mapY, mapSize, mapSize);
+        ctx.fillStyle = "red"; ctx.font = `bold ${mapSize * 0.4}px sans-serif`;
+        ctx.fillText("📍", cw * 0.05 + (mapSize * 0.25), mapY + (mapSize * 0.65));
+    }
+
     captureBtn.addEventListener('click', () => {
         const videoRatio = video.videoWidth / video.videoHeight;
         let cropWidth, cropHeight, startX = 0, startY = 0;
@@ -207,32 +276,23 @@
 
         const isLandscape = canvas.width > canvas.height;
         const scaleRef = isLandscape ? canvas.height * 1.5 : canvas.height; 
-        
-        const boxHeight = scaleRef * 0.22;
-        const uiStartY = canvas.height - boxHeight;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(0, uiStartY, canvas.width, boxHeight);
 
-        ctx.fillStyle = "white"; ctx.shadowColor = "black"; ctx.shadowBlur = 4;
-        const paddingLeft = canvas.width * 0.25; 
-        
-        ctx.font = `bold ${scaleRef * 0.030}px sans-serif`;
-        ctx.fillText(currentData.title, paddingLeft, uiStartY + (boxHeight * 0.25));
-
-        ctx.font = `${scaleRef * 0.018}px sans-serif`;
-        let textY = uiStartY + (boxHeight * 0.45);
-        const lineHeight = scaleRef * 0.025;
-        
-        ctx.fillText(currentData.address.substring(0, 80) + '...', paddingLeft, textY);
-        ctx.fillText(`Lat ${currentData.latStr}° Long ${currentData.lonStr}°`, paddingLeft, textY + lineHeight);
-        ctx.fillText(currentData.time, paddingLeft, textY + (lineHeight * 2));
-        ctx.fillText("Note : Captured by GPS Map Camera", paddingLeft, textY + (lineHeight * 3));
-
-        const mapSize = Math.min(canvas.width, canvas.height) * 0.15;
-        const mapY = uiStartY - (mapSize * 0.3);
-        ctx.fillStyle = "#ddd"; ctx.fillRect(canvas.width * 0.05, mapY, mapSize, mapSize);
-        ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.strokeRect(canvas.width * 0.05, mapY, mapSize, mapSize);
-        ctx.fillStyle = "red"; ctx.font = `bold ${mapSize * 0.4}px sans-serif`;
-        ctx.fillText("📍", canvas.width * 0.05 + (mapSize * 0.25), mapY + (mapSize * 0.65));
+        // Terapkan rotasi tag sesuai mode yang dipilih pengguna
+        if (tagMode === 'bottom') {
+            drawWatermark(ctx, canvas.width, canvas.height, scaleRef);
+        } else if (tagMode === 'right') {
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.rotate(90 * Math.PI / 180);
+            drawWatermark(ctx, canvas.height, canvas.width, scaleRef);
+            ctx.restore();
+        } else if (tagMode === 'left') {
+            ctx.save();
+            ctx.translate(0, canvas.height);
+            ctx.rotate(-90 * Math.PI / 180);
+            drawWatermark(ctx, canvas.height, canvas.width, scaleRef);
+            ctx.restore();
+        }
 
         const link = document.createElement('a');
         link.download = `Geotag_${Date.now()}.jpg`; link.href = canvas.toDataURL('image/jpeg', 1.0); link.click();
