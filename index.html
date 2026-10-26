@@ -7,19 +7,15 @@
     <style>
         body { margin: 0; padding: 0; background-color: #111; overflow: hidden; font-family: sans-serif; touch-action: manipulation; display: flex; flex-direction: column; height: 100vh; }
         
-        /* Bilah Atas untuk Pilihan Rasio */
         #top-bar { display: flex; justify-content: center; gap: 15px; padding: 15px 0; background: #000; z-index: 10; }
         .ratio-btn { background: transparent; color: gray; border: 1px solid gray; padding: 5px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; }
         .ratio-btn.active { background: white; color: black; border-color: white; }
         
-        /* Kontainer Utama Video */
         #view-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; width: 100%; }
         
-        /* Pembungkus Video yang akan berubah ukurannya sesuai rasio */
         #video-wrapper { position: relative; width: 100%; background: #000; overflow: hidden; transition: aspect-ratio 0.3s; display: flex; justify-content: center; align-items: center; }
         video { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Overlay Geotag (Menempel di bawah video-wrapper) */
         #overlay { 
             position: absolute; bottom: 0; left: 0; width: 100%; 
             background: rgba(0, 0, 0, 0.5); padding: 4vw; box-sizing: border-box; 
@@ -27,7 +23,7 @@
         }
         
         #map-thumb { 
-            width: 20vw; max-width: 80px; height: 20vw; max-height: 80px; 
+            width: 15vw; max-width: 80px; height: 15vw; max-height: 80px; 
             background-color: #ddd; border: 2px solid white; border-radius: 5px; 
             margin-top: -6vw; background-image: url('https://tile.openstreetmap.org/1/0/0.png'); 
             background-size: cover; position: relative; flex-shrink: 0;
@@ -37,7 +33,6 @@
         #info-text { flex: 1; font-size: clamp(10px, 3vw, 13px); line-height: 1.4; word-wrap: break-word; }
         .title { font-size: clamp(14px, 4vw, 17px); font-weight: bold; margin-bottom: 5px; }
         
-        /* Bilah Bawah untuk Tombol Kamera */
         #bottom-bar { background: #000; padding: 20px 0 40px 0; display: flex; justify-content: center; gap: 20px; z-index: 10; }
         .action-btn { 
             padding: 15px 30px; font-size: 16px; background-color: white; color: #333;
@@ -53,15 +48,15 @@
 <body>
 
 <div id="top-bar">
-    <button class="ratio-btn" data-ratio="1">1:1</button>
-    <button class="ratio-btn active" data-ratio="0.75">3:4</button>
-    <button class="ratio-btn" data-ratio="0.5625">9:16</button>
+    <button class="ratio-btn" id="btn-square" data-ratio="1">1:1</button>
+    <button class="ratio-btn active" id="btn-standard" data-ratio="0.75">3:4</button>
+    <button class="ratio-btn" id="btn-wide" data-ratio="0.5625">9:16</button>
 </div>
 
 <div id="status">Meminta akses kamera & lokasi...</div>
 
 <div id="view-container">
-    <div id="video-wrapper" style="aspect-ratio: 3/4;">
+    <div id="video-wrapper" style="aspect-ratio: 0.75;">
         <video id="video" autoplay playsinline></video>
         
         <div id="overlay">
@@ -94,53 +89,68 @@
     const videoWrapper = document.getElementById('video-wrapper');
     const ratioBtns = document.querySelectorAll('.ratio-btn');
 
+    const btnStandard = document.getElementById('btn-standard');
+    const btnWide = document.getElementById('btn-wide');
+
     let currentData = { lat: 0, lon: 0, title: "", address: "", time: "" };
     let useFrontCamera = false;
     let currentStream = null;
-    let targetRatio = 0.75; // Default 3:4 (lebar/tinggi = 3/4)
+    let targetRatio = 0.75; 
 
-    // Logika Pemilihan Rasio
+    // Fitur Rotasi Otomatis
+    function updateOrientation() {
+        const isLandscape = window.innerWidth > window.innerHeight;
+        
+        if (isLandscape) {
+            btnStandard.innerText = "4:3";
+            btnStandard.setAttribute('data-ratio', "1.333333");
+            btnWide.innerText = "16:9";
+            btnWide.setAttribute('data-ratio', "1.777778");
+        } else {
+            btnStandard.innerText = "3:4";
+            btnStandard.setAttribute('data-ratio', "0.75");
+            btnWide.innerText = "9:16";
+            btnWide.setAttribute('data-ratio', "0.5625");
+        }
+
+        // Segarkan skala sesuai tombol yang sedang aktif
+        const activeBtn = document.querySelector('.ratio-btn.active');
+        if (activeBtn) {
+            targetRatio = parseFloat(activeBtn.getAttribute('data-ratio'));
+            videoWrapper.style.aspectRatio = targetRatio;
+        }
+    }
+
+    // Pantau perubahan orientasi HP / Ukuran Layar PC
+    window.addEventListener('resize', updateOrientation);
+    window.addEventListener('orientationchange', updateOrientation);
+    updateOrientation(); // Jalankan saat pertama dimuat
+
+    // Klik tombol rasio
     ratioBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             ratioBtns.forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
             targetRatio = parseFloat(e.target.getAttribute('data-ratio'));
-            
-            // Ubah tampilan pratinjau
-            if (targetRatio === 1) videoWrapper.style.aspectRatio = "1/1";
-            else if (targetRatio === 0.75) videoWrapper.style.aspectRatio = "3/4";
-            else if (targetRatio === 0.5625) videoWrapper.style.aspectRatio = "9/16";
+            videoWrapper.style.aspectRatio = targetRatio;
         });
     });
 
-    // 1. Mulai Kamera
     function startCamera() {
         if (currentStream) currentStream.getTracks().forEach(track => track.stop());
-        
-        const constraints = {
-            video: { facingMode: useFrontCamera ? "user" : "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
-        };
-
+        const constraints = { video: { facingMode: useFrontCamera ? "user" : "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } };
         navigator.mediaDevices.getUserMedia(constraints)
             .then(stream => {
-                currentStream = stream;
-                video.srcObject = stream;
+                currentStream = stream; video.srcObject = stream;
                 statusEl.innerText = "Kamera aktif. Mencari GPS...";
                 if (currentData.lat === 0) getLocation();
             })
-            .catch(err => {
-                statusEl.innerText = "Akses kamera ditolak atau error.";
-                statusEl.style.color = "red";
-            });
+            .catch(err => { statusEl.innerText = "Akses kamera ditolak atau error."; statusEl.style.color = "red"; });
     }
     startCamera();
 
-    switchBtn.addEventListener('click', () => {
-        useFrontCamera = !useFrontCamera;
-        startCamera();
-    });
+    switchBtn.addEventListener('click', () => { useFrontCamera = !useFrontCamera; startCamera(); });
 
-    // 2. Ambil Lokasi GPS
     function getLocation() {
         if (!navigator.geolocation) { statusEl.innerText = "Browser tidak mendukung GPS."; return; }
         navigator.geolocation.getCurrentPosition(
@@ -154,7 +164,6 @@
         );
     }
 
-    // 3. Ubah Koordinat jadi Alamat
     function fetchAddress(lat, lon) {
         fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
             .then(res => res.json())
@@ -162,14 +171,10 @@
                 statusEl.style.display = "none";
                 let addr = data.address;
                 currentData.title = `${addr.village || addr.suburb || addr.town || "Kecamatan"}, ${addr.state || "Provinsi"}, ${addr.country || "Negara"}`;
-                currentData.address = data.display_name;
-                updateOverlay();
-            }).catch(err => {
-                currentData.title = "Lokasi Tidak Dikenal"; currentData.address = "Gagal mengambil data alamat dari internet."; updateOverlay();
-            });
+                currentData.address = data.display_name; updateOverlay();
+            }).catch(err => { currentData.title = "Lokasi Tidak Dikenal"; currentData.address = "Gagal mengambil data dari internet."; updateOverlay(); });
     }
 
-    // 4. Update Teks Waktu & Info
     function updateOverlay() {
         const now = new Date();
         const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -181,62 +186,58 @@
     }
     setInterval(updateOverlay, 1000);
 
-    // 5. Proses Jepret, Potong (Crop) Gambar, & Download
     captureBtn.addEventListener('click', () => {
         const videoRatio = video.videoWidth / video.videoHeight;
         let cropWidth, cropHeight, startX = 0, startY = 0;
 
-        // Hitung area potong (crop) agar sesuai dengan rasio yang dipilih
         if (videoRatio > targetRatio) {
-            cropHeight = video.videoHeight;
-            cropWidth = cropHeight * targetRatio;
+            cropHeight = video.videoHeight; cropWidth = cropHeight * targetRatio;
             startX = (video.videoWidth - cropWidth) / 2;
         } else {
-            cropWidth = video.videoWidth;
-            cropHeight = cropWidth / targetRatio;
+            cropWidth = video.videoWidth; cropHeight = cropWidth / targetRatio;
             startY = (video.videoHeight - cropHeight) / 2;
         }
 
-        canvas.width = cropWidth;
-        canvas.height = cropHeight;
+        canvas.width = cropWidth; canvas.height = cropHeight;
         
         ctx.save();
         if (useFrontCamera) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-        
-        // Gambar hanya bagian yang dipotong
         ctx.drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        // Menggambar UI Geotag di kanvas
-        const boxHeight = canvas.height * 0.22;
+        // Responsive Scale untuk Watermark 
+        const isLandscape = canvas.width > canvas.height;
+        const scaleRef = isLandscape ? canvas.height * 1.5 : canvas.height; 
+        
+        const boxHeight = scaleRef * 0.22;
         const uiStartY = canvas.height - boxHeight;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-        ctx.fillRect(0, uiStartY, canvas.width, boxHeight);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(0, uiStartY, canvas.width, boxHeight);
 
         ctx.fillStyle = "white"; ctx.shadowColor = "black"; ctx.shadowBlur = 4;
         const paddingLeft = canvas.width * 0.25; 
         
-        ctx.font = `bold ${canvas.height * 0.030}px sans-serif`;
+        ctx.font = `bold ${scaleRef * 0.030}px sans-serif`;
         ctx.fillText(currentData.title, paddingLeft, uiStartY + (boxHeight * 0.25));
 
-        ctx.font = `${canvas.height * 0.018}px sans-serif`;
+        ctx.font = `${scaleRef * 0.018}px sans-serif`;
         let textY = uiStartY + (boxHeight * 0.45);
-        const lineHeight = canvas.height * 0.025;
+        const lineHeight = scaleRef * 0.025;
         
         ctx.fillText(currentData.address.substring(0, 80) + '...', paddingLeft, textY);
         ctx.fillText(`Lat ${currentData.latStr}° Long ${currentData.lonStr}°`, paddingLeft, textY + lineHeight);
         ctx.fillText(currentData.time, paddingLeft, textY + (lineHeight * 2));
         ctx.fillText("Note : Captured by GPS Map Camera", paddingLeft, textY + (lineHeight * 3));
 
-        ctx.fillStyle = "#ddd"; ctx.fillRect(canvas.width * 0.05, uiStartY - (boxHeight * 0.1), canvas.width * 0.15, canvas.width * 0.15);
-        ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.strokeRect(canvas.width * 0.05, uiStartY - (boxHeight * 0.1), canvas.width * 0.15, canvas.width * 0.15);
-        ctx.fillStyle = "red"; ctx.font = `bold ${canvas.height * 0.05}px sans-serif`;
-        ctx.fillText("📍", canvas.width * 0.09, uiStartY + (boxHeight * 0.15));
+        // Thumbnail Peta yang Proporsional
+        const mapSize = Math.min(canvas.width, canvas.height) * 0.15;
+        const mapY = uiStartY - (mapSize * 0.3);
+        ctx.fillStyle = "#ddd"; ctx.fillRect(canvas.width * 0.05, mapY, mapSize, mapSize);
+        ctx.strokeStyle = "white"; ctx.lineWidth = 4; ctx.strokeRect(canvas.width * 0.05, mapY, mapSize, mapSize);
+        ctx.fillStyle = "red"; ctx.font = `bold ${mapSize * 0.4}px sans-serif`;
+        ctx.fillText("📍", canvas.width * 0.05 + (mapSize * 0.25), mapY + (mapSize * 0.65));
 
         const link = document.createElement('a');
-        link.download = `Geotag_${Date.now()}.jpg`;
-        link.href = canvas.toDataURL('image/jpeg', 1.0);
-        link.click();
+        link.download = `Geotag_${Date.now()}.jpg`; link.href = canvas.toDataURL('image/jpeg', 1.0); link.click();
     });
 </script>
 </body>
