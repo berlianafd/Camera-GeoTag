@@ -14,7 +14,7 @@
         #view-container { flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; width: 100%; }
         
         #video-wrapper { position: relative; width: 100%; background: #000; overflow: hidden; transition: aspect-ratio 0.3s; display: flex; justify-content: center; align-items: center; }
-        video { width: 100%; height: 100%; object-fit: cover; }
+        video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
         
         #overlay { 
             position: absolute; bottom: 0; left: 0; width: 100%; 
@@ -97,7 +97,6 @@
     let currentStream = null;
     let targetRatio = 0.75; 
 
-    // Fitur Rotasi Otomatis
     function updateOrientation() {
         const isLandscape = window.innerWidth > window.innerHeight;
         
@@ -113,7 +112,6 @@
             btnWide.setAttribute('data-ratio', "0.5625");
         }
 
-        // Segarkan skala sesuai tombol yang sedang aktif
         const activeBtn = document.querySelector('.ratio-btn.active');
         if (activeBtn) {
             targetRatio = parseFloat(activeBtn.getAttribute('data-ratio'));
@@ -121,12 +119,10 @@
         }
     }
 
-    // Pantau perubahan orientasi HP / Ukuran Layar PC
     window.addEventListener('resize', updateOrientation);
     window.addEventListener('orientationchange', updateOrientation);
-    updateOrientation(); // Jalankan saat pertama dimuat
+    updateOrientation();
 
-    // Klik tombol rasio
     ratioBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             ratioBtns.forEach(b => b.classList.remove('active'));
@@ -138,6 +134,10 @@
 
     function startCamera() {
         if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+        
+        // Menerapkan efek cermin pada pratinjau video jika kamera depan aktif
+        video.style.transform = useFrontCamera ? "scaleX(-1)" : "scaleX(1)";
+
         const constraints = { video: { facingMode: useFrontCamera ? "user" : "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } };
         navigator.mediaDevices.getUserMedia(constraints)
             .then(stream => {
@@ -205,7 +205,6 @@
         ctx.drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        // Responsive Scale untuk Watermark 
         const isLandscape = canvas.width > canvas.height;
         const scaleRef = isLandscape ? canvas.height * 1.5 : canvas.height; 
         
@@ -228,7 +227,6 @@
         ctx.fillText(currentData.time, paddingLeft, textY + (lineHeight * 2));
         ctx.fillText("Note : Captured by GPS Map Camera", paddingLeft, textY + (lineHeight * 3));
 
-        // Thumbnail Peta yang Proporsional
         const mapSize = Math.min(canvas.width, canvas.height) * 0.15;
         const mapY = uiStartY - (mapSize * 0.3);
         ctx.fillStyle = "#ddd"; ctx.fillRect(canvas.width * 0.05, mapY, mapSize, mapSize);
