@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Map Camera Web</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: sans-serif; }
+        #camera-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        #overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.5); padding: 15px; box-sizing: border-box; display: flex; gap: 15px; color: white; text-shadow: 1px 1px 2px black; }
+        #map-thumb { width: 80px; height: 80px; background-color: #ddd; border: 2px solid white; border-radius: 5px; margin-top: -30px; background-image: url('https://tile.openstreetmap.org/1/0/0.png'); background-size: cover; position: relative; }
+        #map-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-size: 24px; }
+        #info-text { flex: 1; font-size: 12px; line-height: 1.4; }
+        .title { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+        #controls { position: absolute; bottom: 120px; width: 100%; text-align: center; }
+        button { padding: 15px 30px; font-size: 16px; background-color: white; border: none; border-radius: 30px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #status { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.8); color: black; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="camera-container">
+    <div id="status">Meminta akses kamera & lokasi...</div>
+    <video id="video" autoplay playsinline></video>
+    
+    <div id="controls">
+        <button id="capture-btn">📸 Ambil Foto</button>
+    </div>
+
+    <div id="overlay">
+        <div id="map-thumb"><div id="map-pin">📍</div></div>
+        <div id="info-text">
+            <div class="title" id="location-title">Mencari Lokasi...</div>
+            <div id="address-text">Mohon tunggu, sedang mengambil data GPS.</div>
+            <div id="coords-text">Lat: - Long: -</div>
+            <div id="time-text">Waktu: -</div>
+            <div id="note-text">Note : Captured by GPS Map Camera</div>
+        </div>
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const captureBtn = document.getElementById('capture-btn');
+
+    let currentData = { lat: 0, lon: 0, title: "", address: "", time: "" };
+
+    // 1. Mulai Kamera
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => {
+            video.srcObject = stream;
+            statusEl.innerText = "Kamera aktif. Mencari GPS...";
+            getLocation();
+        })
+        .catch(err => {
+            statusEl.innerText = "Akses kamera ditolak atau error.";
+            statusEl.style.color = "red";
+        });
+
+    // 2. Ambil Lokasi GPS
+    function getLocation() {
+        if (!navigator.geolocation) {
+            statusEl.innerText = "Browser tidak mendukung GPS.";
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                currentData.lat = position.coords.latitude;
+                currentData.latStr = currentData.lat.toFixed(6);
+                currentData.lon = position.coords.longitude;
+                currentData.lonStr = currentData.lon.toFixed(6);
+                fetchAddress(currentData.lat, currentData.lon);
+            },
+            (error) => {
+                statusEl.innerText = `GPS Error: ${error.message}`;
+                statusEl.style.color = "red";
+            },
+            { enableHighAccuracy: false, timeout: 15000 }
+        );
+    }
+
+    // 3. Ubah Koordinat jadi Alamat (Nominatim API)
+    function fetchAddress(lat, lon) {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+            .then(res => res.json())
+            .then(data => {
+                statusEl.style.display = "none";
+                let addr = data.address;
+                currentData.title = `${addr.village || addr.suburb || addr.town || "Kecamatan"}, ${addr.state || "Provinsi"}, ${addr.country || "Negara"}`;
+                currentData.address = data.display_name;
+                updateOverlay();
+            }).catch(err => {
+                currentData.title = "Lokasi Tidak Dikenal";
+                currentData.address = "Gagal mengambil data alamat dari internet.";
+                updateOverlay();
+            });
+    }
+
+    // 4. Update Teks di Layar
+    function updateOverlay() {
+        const now = new Date();
+        const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        const dayName = days[now.getDay()];
+        const dateStr = now.toLocaleDateString('id-ID');
+        const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+        currentData.time = `${dayName}, ${dateStr} ${timeStr} GMT +07:00`;
+
+        document.getElementById('location-title').innerText = currentData.title;
+        document.getElementById('address-text').innerText = currentData.address;
+        document.getElementById('coords-text').innerText = `Lat ${currentData.latStr}° Long ${currentData.lonStr}°`;
+        document.getElementById('time-text').innerText = currentData.time;
+    }
+
+    // Update waktu setiap detik
+    setInterval(updateOverlay, 1000);
+
+    // 5. Proses Jepret & Download
+    captureBtn.addEventListener('click', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Gambar video ke kanvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Styling Watermark Box
+        const boxHeight = canvas.height * 0.25;
+        const startY = canvas.height - boxHeight;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, startY, canvas.width, boxHeight);
+
+        // Styling Teks
+        ctx.fillStyle = "white";
+        ctx.shadowColor = "black";
+        ctx.shadowBlur = 4;
+        const paddingLeft = canvas.width * 0.25; 
+        
+        // Judul Lokasi
+        ctx.font = `bold ${canvas.height * 0.035}px sans-serif`;
+        ctx.fillText(currentData.title, paddingLeft, startY + (boxHeight * 0.25));
+
+        // Info Alamat, Koordinat, Waktu
+        ctx.font = `${canvas.height * 0.02}px sans-serif`;
+        let textY = startY + (boxHeight * 0.45);
+        const lineHeight = canvas.height * 0.03;
+        
+        ctx.fillText(currentData.address.substring(0, 80) + '...', paddingLeft, textY);
+        ctx.fillText(`Lat ${currentData.latStr}° Long ${currentData.lonStr}°`, paddingLeft, textY + lineHeight);
+        ctx.fillText(currentData.time, paddingLeft, textY + (lineHeight * 2));
+        ctx.fillText("Note : Captured by GPS Map Camera", paddingLeft, textY + (lineHeight * 3));
+
+        // Gambar Fake Map Thumb
+        ctx.fillStyle = "#ddd";
+        ctx.fillRect(canvas.width * 0.05, startY - (boxHeight * 0.1), canvas.width * 0.15, canvas.width * 0.15);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(canvas.width * 0.05, startY - (boxHeight * 0.1), canvas.width * 0.15, canvas.width * 0.15);
+        ctx.fillStyle = "red";
+        ctx.font = `bold ${canvas.height * 0.05}px sans-serif`;
+        ctx.fillText("📍", canvas.width * 0.1, startY + (boxHeight * 0.15));
+
+        // Download Hasil
+        const dataURL = canvas.toDataURL('image/jpeg', 0.9);
+        const link = document.createElement('a');
+        link.download = `Geotag_${Date.now()}.jpg`;
+        link.href = dataURL;
+        link.click();
+    });
+</script>
+</body>
+</html>
