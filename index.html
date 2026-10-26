@@ -133,15 +133,35 @@
     });
 
     function updateTagLayout() {
-        const vw = videoWrapper.clientWidth;
         const vh = videoWrapper.clientHeight;
         
+        // Reset properti transformasi CSS
+        overlay.style.width = '';
+        overlay.style.bottom = '';
+        overlay.style.left = '';
+        overlay.style.right = '';
+        overlay.style.top = '';
+        overlay.style.transformOrigin = '';
+        overlay.style.transform = '';
+
         if (tagMode === 'bottom') {
-            overlay.style.width = '100%'; overlay.style.bottom = '0'; overlay.style.left = '0'; overlay.style.top = 'auto'; overlay.style.transform = 'none';
+            overlay.style.width = '100%';
+            overlay.style.bottom = '0';
+            overlay.style.left = '0';
         } else if (tagMode === 'right') {
-            overlay.style.width = vh + 'px'; overlay.style.bottom = 'auto'; overlay.style.left = vw + 'px'; overlay.style.top = '0'; overlay.style.transformOrigin = 'top left'; overlay.style.transform = 'rotate(90deg)';
+            // Live Preview Tag: Kanan (Edge Kiri)
+            overlay.style.width = vh + 'px';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.transformOrigin = 'top left';
+            overlay.style.transform = 'rotate(90deg) translateY(-100%)';
         } else if (tagMode === 'left') {
-            overlay.style.width = vh + 'px'; overlay.style.bottom = vh + 'px'; overlay.style.left = '0'; overlay.style.top = 'auto'; overlay.style.transformOrigin = 'bottom left'; overlay.style.transform = 'rotate(-90deg)';
+            // Live Preview Tag: Kiri (Edge Kanan)
+            overlay.style.width = vh + 'px';
+            overlay.style.top = '0';
+            overlay.style.right = '0';
+            overlay.style.transformOrigin = 'top right';
+            overlay.style.transform = 'rotate(-90deg) translateY(-100%)';
         }
     }
 
